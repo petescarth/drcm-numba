@@ -218,3 +218,29 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Geospatial binary & intermediate files
+*.tif
+*.tiff
+*.vrt
+*.fgb
+*.geojson
+*.qgz
+*.qmd
+*.doc
+*.docx
+*.aux.xml
+*.xml
+*.gpkg
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.parquet
+*.tar.gz
+
+# Local agent directives
+AGENTS.md
+.kilo/
+
