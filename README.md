@@ -105,36 +105,11 @@ When advancing one column to the right:
 
 ## 4. Numba Modernization vs. Legacy Fortran 90
 
-### A. Critical Bug Fix: Uninitialized Stack Memory & Segfaults
-Line 1 of the legacy `refpixelfilter.f90` noted:
-```fortran
-! note I get a seg fault if I don't do this as a module
-! It might be a good idea to work out why!
-```
-**Root Cause Discovered in Fortran**:
-In `function bounds(histogram, n, lq, uq)`, the reverse accumulation loop:
-```fortran
-do i = n, 1, -1
-   if (cumsum < uv .AND. uvfound == 0) then
-      b(2) = i
-      uvfound = 1
-   end if
-   if (cumsum < lv) then
-      b(1) = i
-      exit
-   end if
-   cumsum = cumsum - histogram(i)
-end do
-```
-If all valid counts are concentrated in bin 1 (or edge histograms where `cumsum` drops to zero after subtracting bin 1), the loop completes without meeting `cumsum < lv`. In Fortran, `b(1)` and `b(2)` were never initialized, returning **uninitialized stack garbage** (e.g., `b = [-1454261744, 31862]`).
-When `calcmean()` executed `do i = lowerb, upperb`, it indexed far outside array bounds, corrupting the heap and triggering segmentation faults.
-*In the Numba implementation, variables are strictly initialized, bounds are protected, and memory corruption is physically impossible.*
-
-### B. Deployment & Toolchain Modernization
+### A. Deployment & Toolchain Modernization
 - **Python >= 3.12 Compatibility**: `f2py` deprecated and removed the legacy `distutils` backend in Python 3.12, requiring `gfortran`, `meson`, and `ninja`.
 - **Pure Python Delivery**: `refpix_numba_ibra.py` runs natively via Numba JIT on standard Python/NumPy environments without C/Fortran compiler toolchains or binary wheel compilation.
 
-### C. Performance & Profiling Benchmarks
+### B. Performance & Profiling Benchmarks
 Evaluated on 1000 x 1000 to 2000 x 2000 real satellite chips (4,000,000 pixels, operational `window=1501`):
 
 | Implementation | Runtime (2000 x 2000) | Throughput | Speedup vs Fortran |
