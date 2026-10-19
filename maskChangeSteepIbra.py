@@ -45,6 +45,11 @@ def maskStatsIbra(info, inputs, outputs, otherArgs):
     (nRows, nCols) = inputs.terrainData.shape[1:]
     outImage = np.zeros((2, nRows, nCols), dtype=np.uint8)
 
+    # Ocean / Background fast-path: if block has no valid bare ground, return empty immediately
+    if not np.any(inputs.bareStats[6] > 0):
+        outputs.dcrmMask = outImage
+        return
+
     # Band 1: Bare ground masked by clearing and slope:
     # 1. NCAS Woody Extent: changeData[0] is Woody Max (0=non-woody, 1=woodland, 2=forest).
     #    We exclude Class 2 (forest, canopy cover >20%) to ensure reference sites reflect
@@ -83,17 +88,20 @@ def maskStatsIbra(info, inputs, outputs, otherArgs):
     # Check if block intersects IBRA vector bounding box
     if not (xMax_b < ext[0] or xMin_b > ext[1] or yMax_b < ext[2] or yMin_b > ext[3]):
         otherArgs.lyr.SetSpatialFilterRect(xMin_b, yMin_b, xMax_b, yMax_b)
-        if otherArgs.lyr.GetFeatureCount() > 0:
-            mem_driver = gdal.GetDriverByName("MEM")
-            block_mem = mem_driver.Create("", nCols, nRows, 1, gdal.GDT_Byte)
-            block_mem.SetProjection(otherArgs.proj)
-            block_mem.SetGeoTransform((tl_x, xRes, 0, tl_y, 0, yRes))
-            block_mem.GetRasterBand(1).Fill(0)
 
-            gdal.RasterizeLayer(block_mem, [1], otherArgs.lyr, options=["ATTRIBUTE=OBJECTID"])
-            outImage[1] = block_mem.GetRasterBand(1).ReadAsArray()
-            block_mem = None
-        otherArgs.lyr.SetSpatialFilter(None)
+        # Reuse preallocated in-memory dataset when dimensions match standard block size
+        if nCols == otherArgs.mem_ds.RasterXSize and nRows == otherArgs.mem_ds.RasterYSize:
+            mem_ds = otherArgs.mem_ds
+            mem_band = otherArgs.mem_band
+        else:
+            mem_ds = otherArgs.mem_driver.Create("", nCols, nRows, 1, gdal.GDT_Byte)
+            mem_ds.SetProjection(otherArgs.proj)
+            mem_band = mem_ds.GetRasterBand(1)
+
+        mem_ds.SetGeoTransform((tl_x, xRes, 0, tl_y, 0, yRes))
+        mem_band.Fill(0)
+        gdal.RasterizeLayer(mem_ds, [1], otherArgs.lyr, options=["ATTRIBUTE=OBJECTID"])
+        outImage[1] = mem_band.ReadAsArray()
 
     outputs.dcrmMask = outImage
 
@@ -132,6 +140,12 @@ def main():
     otherArgs.lyr = vec_ds.GetLayer(0)
     otherArgs.proj = target_proj
     otherArgs.extent = otherArgs.lyr.GetExtent()
+
+    # Preallocate reusable in-memory rasterization dataset to avoid per-block allocation overhead
+    otherArgs.mem_driver = gdal.GetDriverByName("MEM")
+    otherArgs.mem_ds = otherArgs.mem_driver.Create("", 512, 512, 1, gdal.GDT_Byte)
+    otherArgs.mem_ds.SetProjection(target_proj)
+    otherArgs.mem_band = otherArgs.mem_ds.GetRasterBand(1)
 
     controls = applier.ApplierControls()
     controls.setFootprintType(applier.BOUNDS_FROM_REFERENCE)
