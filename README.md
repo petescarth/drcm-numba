@@ -1,4 +1,4 @@
-# Deficit / Reference Cover Method (DRCM) Pipeline
+# Dynamic Reference Cover Method (DRCM) Pipeline
 
 This repository contains a high-performance Python and Numba implementation of the Australian seasonal Groundcover Reference Pixel Filter and DRCM processing pipeline. The software applies National Carbon Accounting System (NCAS) woody extent masks and Interim Biogeographic Regionalisation for Australia (IBRA) bioregion boundaries.
 
