@@ -235,7 +235,7 @@ conda run -n rios python seasonalDRCMIbra.py lztmre_nsw_m202606202608_dp8a2_vint
 - `--threads`: Number of CPU threads (default: all available cores).
 
 #### Output Product Specification (`GTiff`):
-- **Compression**: `COMPRESS=DEFLATE`, `ZLEVEL=1`, `PREDICTOR=2`, `TILED=YES`, `BLOCKXSIZE=512`, `BLOCKYSIZE=512`, `BIGTIFF=YES`.
+- **Compression**: `COMPRESS=DEFLATE`, `ZLEVEL=1`, `PREDICTOR=1`, `TILED=YES`, `BLOCKXSIZE=512`, `BLOCKYSIZE=512`, `BIGTIFF=YES`.
 - **Overviews**: Internal DEFLATE-compressed overviews at 4x, 8x, 16x, 32x downsampling using AVERAGE resampling.
 - **Band 1**: `Difference Ground Cover (DGC)`
   - Scaled as: 100 + (Groundcover - Refpixel)
