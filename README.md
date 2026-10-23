@@ -2,7 +2,7 @@
 
 This repository contains a high-performance Python and Numba implementation of the Australian seasonal Groundcover Reference Pixel Filter and Dynamic Reference-Cover Method (DRCM) pipeline, based on the foundational methodology of **Bastin et al. (2012)** ([DOI: 10.1016/j.rse.2012.02.021](https://doi.org/10.1016/j.rse.2012.02.021)). The software applies National Carbon Accounting System (NCAS) woody extent masks and Interim Biogeographic Regionalisation for Australia (IBRA) bioregion boundaries.
 
-This software replaces the 15-year-old Fortran 90 module (`refpixelfilter.f90`) and legacy scripts (`seasonalDCRM.py`, `maskChangeSteep.py`). It provides memory-safe processing, parallel multi-threading, and verified numerical accuracy.
+This software replaces and modernizes the original Joint Remote Sensing Research Program (JRSRP) codebase ([`jrsrp/themes/cover/groundcover/drcm`](https://gitlab.com/jrsrp/themes/cover/groundcover/drcm)), including the 15-year-old Fortran 90 module (`refpixelfilter.f90`) and legacy scripts (`seasonalDCRM.py`, `maskChangeSteep.py`). It provides memory-safe processing, parallel multi-threading, and verified numerical accuracy.
 
 ---
 
@@ -26,7 +26,11 @@ DRCM establishes a dynamic, image-derived reference framework using multitempora
    - Within each moving window, reference pixels are selected from the upper percentiles (typically the 90th to 95th percentiles) of the temporal minimum ground cover distribution.
 4. **Difference Ground Cover (DGC)**:
    - Evaluates the difference between the central pixel's ground cover and the mean of surrounding reference pixels:
-     $$\text{DGC} = \text{Groundcover}_{\text{pixel}} - \text{Groundcover}_{\text{reference}}$$
+
+     ```math
+     \text{DGC} = \text{Groundcover}_{\text{pixel}} - \text{Groundcover}_{\text{reference}}
+     ```
+
    - This difference standardizes ground cover against the local landscape's climatic potential, isolating management-induced cover deficit or surplus from seasonal rainfall fluctuations.
 
 ### C. Multi-Scale Empirical Validation (Bastin et al., 2012)
@@ -54,6 +58,8 @@ The original paper validated the method across three operational scales in Queen
   doi={10.1016/j.rse.2012.02.021}
 }
 ```
+
+- **Original JRSRP GitLab Repository**: [https://gitlab.com/jrsrp/themes/cover/groundcover/drcm](https://gitlab.com/jrsrp/themes/cover/groundcover/drcm)
 
 ---
 
@@ -153,6 +159,7 @@ When moving one column to the right:
 ## 5. Modernization and Performance Benchmarks
 
 ### A. Deployment and Toolchain
+- **Original Codebase Modernization**: Modernizes the legacy JRSRP repository ([`jrsrp/themes/cover/groundcover/drcm`](https://gitlab.com/jrsrp/themes/cover/groundcover/drcm)) with a pure-Python, memory-bounded, multi-IBRA implementation.
 - **Python >= 3.12 Compatibility**: Does not require legacy `distutils`, `f2py`, `gfortran`, `meson`, or `ninja` compilers at runtime.
 - **Pure Python Delivery**: Runs natively via Numba JIT on standard Python and NumPy environments.
 
