@@ -1,12 +1,63 @@
 # Dynamic Reference Cover Method (DRCM) Pipeline
 
-This repository contains a high-performance Python and Numba implementation of the Australian seasonal Groundcover Reference Pixel Filter and DRCM processing pipeline. The software applies National Carbon Accounting System (NCAS) woody extent masks and Interim Biogeographic Regionalisation for Australia (IBRA) bioregion boundaries.
+This repository contains a high-performance Python and Numba implementation of the Australian seasonal Groundcover Reference Pixel Filter and Dynamic Reference-Cover Method (DRCM) pipeline, based on the foundational methodology of **Bastin et al. (2012)** ([DOI: 10.1016/j.rse.2012.02.021](https://doi.org/10.1016/j.rse.2012.02.021)). The software applies National Carbon Accounting System (NCAS) woody extent masks and Interim Biogeographic Regionalisation for Australia (IBRA) bioregion boundaries.
 
 This software replaces the 15-year-old Fortran 90 module (`refpixelfilter.f90`) and legacy scripts (`seasonalDCRM.py`, `maskChangeSteep.py`). It provides memory-safe processing, parallel multi-threading, and verified numerical accuracy.
 
 ---
 
-## 1. System Architecture and Workflow
+## 1. Scientific Foundation: The Dynamic Reference-Cover Method
+
+The Dynamic Reference-Cover Method (DRCM) was established by **Bastin et al. (2012)** to resolve the fundamental challenge of separating grazing management effects from climate variability across rangelands at regional to continental scales.
+
+### A. The Rangeland Monitoring Challenge
+- **Climate vs. Management Confounding**: In arid and semi-arid rangelands, high inter-annual rainfall variability ("boom and bust" cycles) frequently masks or confounds management-driven changes in ground cover (grazing pressure, stocking rates, spelling).
+- **Scarcity of Physical Benchmarks**: Establishing static, ungrazed reference exclosures across millions of square kilometers is logistically and economically unfeasible. Furthermore, fixed benchmarks cannot capture local environmental gradients or long-term climate dynamics.
+- **Absence of Management Spatial Data**: Regional monitoring cannot rely on ground-based reference sites or property-level management GIS records, as these are rarely available consistently at landscape scale.
+
+### B. Conceptual Framework and Methodology
+DRCM establishes a dynamic, image-derived reference framework using multitemporal satellite ground cover sequences (derived from Landsat TM/ETM+ and operational DEA/JRSRP fractional cover):
+1. **Temporal Minimum Ground Cover as a Persistence Indicator**:
+   - The method computes a temporal minimum ground cover image (or bare ground maximum) across all historical years to identify locations that retain ground cover during years of lowest rainfall (climatic stress).
+   - Areas maintaining high cover under severe rainfall deficits serve as persistent, resilient landscape benchmarks under sustainable grazing or conservative utilization.
+2. **Moving Window Local Neighbourhood**:
+   - Operates a large moving spatial window (operational default: 1501 × 1501 pixels / ~45 km × 45 km, ~2,000 km²) to define a local reference population subject to equivalent macro-climatic conditions and broad geomorphology.
+3. **Cover-Index Percentile Benchmarks**:
+   - Within each moving window, reference pixels are selected from the upper percentiles (typically the 90th to 95th percentiles) of the temporal minimum ground cover distribution.
+4. **Difference Ground Cover (DGC)**:
+   - Evaluates the difference between the central pixel's ground cover and the mean of surrounding reference pixels:
+     $$\text{DGC} = \text{Groundcover}_{\text{pixel}} - \text{Groundcover}_{\text{reference}}$$
+   - This difference standardizes ground cover against the local landscape's climatic potential, isolating management-induced cover deficit or surplus from seasonal rainfall fluctuations.
+
+### C. Multi-Scale Empirical Validation (Bastin et al., 2012)
+The original paper validated the method across three operational scales in Queensland tropical savanna woodlands:
+1. **Grazing Trial Scale (Wambiana)**: In small paddocks under controlled stocking, heavy stocking resulted in substantial ground cover decline that DRCM successfully detected and distinguished from rainfall effects.
+2. **Commercial Paddock Scale**: In commercial paddocks, wet-season spelling (destocking during critical growth periods) produced measurable, positive ground cover recovery detected by DRCM.
+3. **Regional / Property Scale (1.3 × 10⁶ km²)**: Across commercial beef properties with different initial land condition ratings across Queensland's rangelands, DRCM showed broad agreement with ground-based Grazing Land Condition (GLC) assessments. Disagreements occurred primarily where changing land condition reflected shifts in pasture botanical composition (e.g. loss of perennial 3P tussock grasses) rather than total fractional cover alone.
+
+### D. Primary Reference and Citation
+
+> **Bastin, G., Scarth, P., Chewings, V., Sparrow, A., Denham, R., Schmidt, M., O'Reagain, P., Shepherd, R., & Abbott, B. (2012).**  
+> *Separating grazing and rainfall effects at regional scale using remote sensing imagery: A dynamic reference-cover method.*  
+> **Remote Sensing of Environment**, 121, 443–457.  
+> DOI: [10.1016/j.rse.2012.02.021](https://doi.org/10.1016/j.rse.2012.02.021)
+
+```bibtex
+@article{bastin2012separating,
+  title={Separating grazing and rainfall effects at regional scale using remote sensing imagery: A dynamic reference-cover method},
+  author={Bastin, G. and Scarth, P. and Chewings, V. and Sparrow, A. and Denham, R. and Schmidt, M. and O'Reagain, P. and Shepherd, R. and Abbott, B.},
+  journal={Remote Sensing of Environment},
+  volume={121},
+  pages={443--457},
+  year={2012},
+  publisher={Elsevier},
+  doi={10.1016/j.rse.2012.02.021}
+}
+```
+
+---
+
+## 2. System Architecture and Workflow
 
 ```
 [NCAS Woody Extent]      [Terrain Slope]       [1989-2020 Bare Stats]      [IBRA 7.0 Vector]
@@ -54,7 +105,7 @@ dp8a2 (DEA) or dixa2 (JRSRP)                        Parallel Multi-IBRA Sliding 
 
 ---
 
-## 2. Technical Rationale: NCAS Forest Masking and IBRA Stratification
+## 3. Technical Rationale: NCAS Forest Masking and IBRA Stratification
 
 ### A. NCAS Woody Extent and Terrain Slope Masking
 * **Purpose**: DRCM measures rangeland pasture condition (grasses, forbs, and litter) relative to local persistent reference sites. In dense forest environments (tree canopy cover > 20%), spectral unmixing does not measure groundcover accurately because tree crowns cause dense shadow and light scattering.
@@ -73,7 +124,7 @@ dp8a2 (DEA) or dixa2 (JRSRP)                        Parallel Multi-IBRA Sliding 
 
 ---
 
-## 3. High-Performance Multi-IBRA Engine: `refpix_numba_ibra.py`
+## 4. High-Performance Multi-IBRA Engine: `refpix_numba_ibra.py`
 
 ### Memory Architecture and L2 Cache Locality
 Instead of a single 1D histogram, the multi-IBRA engine maintains a 2D table for each thread:
@@ -99,7 +150,7 @@ When moving one column to the right:
 
 ---
 
-## 4. Modernization and Performance Benchmarks
+## 5. Modernization and Performance Benchmarks
 
 ### A. Deployment and Toolchain
 - **Python >= 3.12 Compatibility**: Does not require legacy `distutils`, `f2py`, `gfortran`, `meson`, or `ninja` compilers at runtime.
@@ -124,7 +175,7 @@ Measured on 1000 x 1000 to 2000 x 2000 satellite arrays (4,000,000 pixels, compa
 
 ---
 
-## 5. Verification and Test Suite (`test_ibra_drcm.py`)
+## 6. Verification and Test Suite (`test_ibra_drcm.py`)
 
 The test suite in `test_ibra_drcm.py` provides 100% test coverage across all micro-functions, algorithms, and integration drivers:
 
@@ -183,7 +234,7 @@ The test suite in `test_ibra_drcm.py` provides 100% test coverage across all mic
 
 ---
 
-## 6. Scripts and Command-Line Usage
+## 7. Scripts and Command-Line Usage
 
 ### Script Summary
 
