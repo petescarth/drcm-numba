@@ -1,45 +1,36 @@
 # Dynamic Reference Cover Method (DRCM) Pipeline
 
-This repository contains a high-performance Python and Numba implementation of the Australian seasonal Groundcover Reference Pixel Filter and Dynamic Reference-Cover Method (DRCM) pipeline, based on the foundational methodology of **Bastin et al. (2012)** ([DOI: 10.1016/j.rse.2012.02.021](https://doi.org/10.1016/j.rse.2012.02.021)). The software applies National Carbon Accounting System (NCAS) woody extent masks and Interim Biogeographic Regionalisation for Australia (IBRA) bioregion boundaries.
+This repository provides a high-performance, pure-Python + Numba implementation of the Australian seasonal Groundcover Reference Pixel Filter and Dynamic Reference-Cover Method (DRCM) pipeline, based on **Bastin et al. (2012)** ([DOI: 10.1016/j.rse.2012.02.021](https://doi.org/10.1016/j.rse.2012.02.021)).
 
-This software replaces and modernizes the original Joint Remote Sensing Research Program (JRSRP) codebase ([`jrsrp/themes/cover/groundcover/drcm`](https://gitlab.com/jrsrp/themes/cover/groundcover/drcm)), including the 15-year-old Fortran 90 module (`refpixelfilter.f90`) and legacy scripts (`seasonalDCRM.py`, `maskChangeSteep.py`). It provides memory-safe processing, parallel multi-threading, and verified numerical accuracy.
+It modernizes the original Joint Remote Sensing Research Program (JRSRP) codebase ([`jrsrp/themes/cover/groundcover/drcm`](https://gitlab.com/jrsrp/themes/cover/groundcover/drcm))—replacing the compiled Fortran 90 module (`refpixelfilter.f90`) and legacy scripts (`seasonalDCRM.py`, `maskChangeSteep.py`)—with Serpentine 2D tiled Numba JIT kernels, IBRA biogeographic stratification (`1..255` region IDs), halo-padded AOI subsetting, sparse-reference cloud recovery, and a self-contained offline verification suite with real satellite test chips (`test_data/`).
 
 ---
 
 ## 1. Scientific Foundation: The Dynamic Reference-Cover Method
 
-The Dynamic Reference-Cover Method (DRCM) was established by **Bastin et al. (2012)** to resolve the fundamental challenge of separating grazing management effects from climate variability across rangelands at regional to continental scales.
+The Dynamic Reference-Cover Method (DRCM) was established by **Bastin et al. (2012)** to separate grazing management effects from climate variability across rangelands at regional to continental scales.
 
 ### A. The Rangeland Monitoring Challenge
-- **Climate vs. Management Confounding**: In arid and semi-arid rangelands, high inter-annual rainfall variability ("boom and bust" cycles) frequently masks or confounds management-driven changes in ground cover (grazing pressure, stocking rates, spelling).
-- **Scarcity of Physical Benchmarks**: Establishing static, ungrazed reference exclosures across millions of square kilometers is logistically and economically unfeasible. Furthermore, fixed benchmarks cannot capture local environmental gradients or long-term climate dynamics.
-- **Absence of Management Spatial Data**: Regional monitoring cannot rely on ground-based reference sites or property-level management GIS records, as these are rarely available consistently at landscape scale.
+- **Climate vs. Management Confounding**: In arid and semi-arid rangelands, high inter-annual rainfall variability ("boom and bust" cycles) masks or confounds management-driven changes in ground cover (grazing pressure, stocking rates, spelling).
+- **Scarcity of Physical Benchmarks**: Establishing static, ungrazed reference exclosures across millions of square kilometers is logistically and economically unfeasible, and fixed exclosures cannot capture local environmental gradients everywhere.
+- **Absence of Management Spatial Data**: Regional monitoring cannot rely consistently on property-level management GIS records at landscape scale.
 
 ### B. Conceptual Framework and Methodology
-DRCM establishes a dynamic, image-derived reference framework using multitemporal satellite ground cover sequences (derived from Landsat TM/ETM+ and operational DEA/JRSRP fractional cover):
+DRCM establishes a dynamic, image-derived reference framework using multitemporal satellite fractional ground cover imagery (Landsat TM/ETM+/OLI, DEA/JRSRP fractional cover):
 1. **Temporal Minimum Ground Cover as a Persistence Indicator**:
-   - The method computes a temporal minimum ground cover image (or bare ground maximum) across all historical years to identify locations that retain ground cover during years of lowest rainfall (climatic stress).
-   - Areas maintaining high cover under severe rainfall deficits serve as persistent, resilient landscape benchmarks under sustainable grazing or conservative utilization.
+   - Computes a temporal minimum ground cover image (or long-term bare ground maximum) across multi-decadal imagery to identify locations retaining cover during climatic stress.
 2. **Moving Window Local Neighbourhood**:
-   - Operates a large moving spatial window (operational default: 1501 × 1501 pixels / ~45 km × 45 km, ~2,000 km²) to define a local reference population subject to equivalent macro-climatic conditions and broad geomorphology.
-3. **Cover-Index Percentile Benchmarks**:
-   - Within each moving window, reference pixels are selected from the upper percentiles (typically the 90th to 95th percentiles) of the temporal minimum ground cover distribution.
+   - Evaluates a large moving spatial window (operational default: `1501 × 1501` pixels / ~45 km × 45 km at 30 m resolution) to define a local reference population subject to equivalent macro-climatic conditions.
+3. **Upper-Percentile Reference Benchmarks**:
+   - Within each moving window (and matching IBRA region when enabled), selects persistent reference pixels in the upper quantile tail (typically the `90th` to `95th` percentiles) and averages their seasonal ground cover.
 4. **Difference Ground Cover (DGC)**:
-   - Evaluates the difference between the central pixel's ground cover and the mean of surrounding reference pixels:
+   - Evaluates the central pixel's seasonal ground cover relative to the surrounding reference mean:
 
      ```math
      \text{DGC} = \text{Groundcover}_{\text{pixel}} - \text{Groundcover}_{\text{reference}}
      ```
 
-   - This difference standardizes ground cover against the local landscape's climatic potential, isolating management-induced cover deficit or surplus from seasonal rainfall fluctuations.
-
-### C. Multi-Scale Empirical Validation (Bastin et al., 2012)
-The original paper validated the method across three operational scales in Queensland tropical savanna woodlands:
-1. **Grazing Trial Scale (Wambiana)**: In small paddocks under controlled stocking, heavy stocking resulted in substantial ground cover decline that DRCM successfully detected and distinguished from rainfall effects.
-2. **Commercial Paddock Scale**: In commercial paddocks, wet-season spelling (destocking during critical growth periods) produced measurable, positive ground cover recovery detected by DRCM.
-3. **Regional / Property Scale (1.3 × 10⁶ km²)**: Across commercial beef properties with different initial land condition ratings across Queensland's rangelands, DRCM showed broad agreement with ground-based Grazing Land Condition (GLC) assessments. Disagreements occurred primarily where changing land condition reflected shifts in pasture botanical composition (e.g. loss of perennial 3P tussock grasses) rather than total fractional cover alone.
-
-### D. Primary Reference and Citation
+### C. Primary Reference and Citation
 
 > **Bastin, G., Scarth, P., Chewings, V., Sparrow, A., Denham, R., Schmidt, M., O'Reagain, P., Shepherd, R., & Abbott, B. (2012).**  
 > *Separating grazing and rainfall effects at regional scale using remote sensing imagery: A dynamic reference-cover method.*  
@@ -63,202 +54,193 @@ The original paper validated the method across three operational scales in Queen
 
 ---
 
-## 2. System Architecture and Workflow
+## 2. Pipeline Architecture & Methodology
 
-```
-[NCAS Woody Extent]      [Terrain Slope]       [1989-2020 Bare Stats]      [IBRA 7.0 Vector]
-woodyMaxMinCleared.tif  slope_relief_3s.tif   dixa2_bareStats.tif (Band 7)      ibra.fgb
+```text
+[NCAS Woody Extent]      [Terrain Slope]       [Long-Term Bare Stats]      [IBRA 7.0 Vector]
+woodyMaxMinCleared.tif  slope_relief_3s.tif    dixa2/dp8a2 bareStats       ibra.fgb
          │                      │                        │                         │
          └──────────────────────┼────────────────────────┴─────────────────────────┘
                                 │
                                 ▼
-         ┌─────────────────────────────────────────────────────────┐
+         ┌──────────────────────────────────────────────────────────┐
          │ Stage 1: maskChangeSteepIbra.py (RIOS)                   │
-         │ - Excludes NCAS Forest (Woody Max == 2)                 │
-         │ - Excludes Historical Clearing (Cleared == 1)           │
-         │ - Excludes Steep Terrain (Slope relief >= 39 / >= 10%)  │
-         │ - Burns IBRA Bioregions (OBJECTID 1..89 into Band 2)    │
-         └──────────────────────────┬──────────────────────────────┘
+         │ - Excludes NCAS Forest (Woody Max == 2)                  │
+         │ - Excludes Historical Clearing (Cleared == 1)            │
+         │ - Excludes Steep Terrain (Slope relief >= 39 / >= 10%)   │
+         │ - Burns IBRA Bioregions (1..255 into Band 2)             │
+         └──────────────────────────┬───────────────────────────────┘
                                     │
                                     ▼
-     Output Reference GeoTIFF: dixa2_change_slope2_ibra.tif
-     Band 1: Masked Baseline Groundcover (1..101, 0=NoData)
-     Band 2: IBRA Biogeographic Region ID (1..89, 0=NoData)
+         2-Band Reference GeoTIFF (Band 1: Masked Stats 1..101; Band 2: IBRA 1..255)
                                     │
-    ┌───────────────────────────────┴──────────────────────────────┐
-    │                                                              │
-    ▼                                                              ▼
-[Seasonal Fractional Cover]                         [Stage 2: refpix_numba_ibra.py]
-dp8a2 (DEA) or dixa2 (JRSRP)                        Parallel Multi-IBRA Sliding Window
-    │                                               - 90 Independent Regional Histograms
-    │                                               - O(1) Cache-Aligned Updates
-    └───────────────────────────────┬──────────────────────────────┘
+    ┌───────────────────────────────┴───────────────────────────────┐
+    │                                                               │
+    ▼ (--ibra, default)                                             ▼ (--no-ibra)
+[refpix_numba_ibra.py]                                   [refpix_numba.py]
+Serpentine 2D Tiled Regional Kernels                     Serpentine 2D Tiled Global Kernel
+- 1..255 regions, k=1 fast path & k>=2 tight bboxes      - Single 104-bin cache-aligned histogram
+- 2-bit 256x256 block mask skipping                      - Leading/trailing ocean row trimming
+    └───────────────────────────────┬───────────────────────────────┘
                                     │
                                     ▼
-         ┌─────────────────────────────────────────────────────────┐
-         │ Stage 3: seasonalDRCMIbra.py                            │
-         │ - Dynamic GeoTransform Spatial Alignment                │
-         │ - Auto-detects dp8a2 vs dixa2 encodings                 │
-         │ - Memory-bounded chunk processing with live ETA         │
-         │ - Calculates internal overviews (4, 8, 16, 32)          │
-         └──────────────────────────┬──────────────────────────────┘
+         ┌──────────────────────────────────────────────────────────┐
+         │ Stage 3: seasonalDRCMIbra.py                             │
+         │ - Auto-detects dp8a2 (0..100%) vs dixa2 (100..200)       │
+         │ - Validates aligned grids & zero-pads off-grid extents   │
+         │ - Halo-padded --bbox / --geojson & native c_start/c_stop │
+         │ - Chunk overlap reuse + background GDAL prefetch         │
+         │ - Tiled DEFLATE (PREDICTOR=2) GeoTIFF + overviews        │
+         └──────────────────────────┬───────────────────────────────┘
                                     │
                                     ▼
-     Final DRCM GeoTIFF: doda2_ibra_vinterim.tif
-     Band 1: Difference Ground Cover (DGC, IBRA-Constrained)
-     Band 2: Reference Ground Cover (IBRA-Constrained)
+         Output GeoTIFF: Band 1 DGC (100 + gc - ref, 0=NoData)
+                         Band 2 Reference Cover (100 + ref, 0=NoData)
 ```
 
----
-
-## 3. Technical Rationale: NCAS Forest Masking and IBRA Stratification
-
-### A. NCAS Woody Extent and Terrain Slope Masking
-* **Purpose**: DRCM measures rangeland pasture condition (grasses, forbs, and litter) relative to local persistent reference sites. In dense forest environments (tree canopy cover > 20%), spectral unmixing does not measure groundcover accurately because tree crowns cause dense shadow and light scattering.
-* **Filter Rules**:
-  - `inputs.changeData[0] != 2`: Band 1 of `woodyMaxMinCleared.tif` contains NCAS Woody Maximum (0 = Non-woody, 1 = Woodland, 2 = Forest). The software excludes pixels with forest cover (Class 2). This makes sure that reference sites represent open rangelands and grazing pasture.
-  - `inputs.changeData[2] != 1`: Band 3 records historical clearing events (1 = Cleared). The software excludes cleared land to prevent disturbed tracts from lowering baseline standards.
-  - `inputs.terrainData[0] < 39`: Based on Speight (2009) Table 5 (CSIRO and Geoscience Australia landform pattern classification in `dem_s_slope_relief_3s_metadata.doc`). The two-digit values combine median slope (tens digit) and relief (units digit):
-    - Tens digit (Median slope): `10` (< 1%, level), `20` (1-3%, very gently sloping), `30` (3-10%, gently sloping), `40` (10-32%, moderately sloping / rolling), `50` (32-56%, steep), `60` (56-100%, very steep), `70` (> 100%, precipitous).
-    - Codes < 39 select only plains, rises, and low hills with median slope < 10%.
-    - Codes >= 39 exclude all rolling, steep, and mountainous terrain (slope >= 10%) and badlands. This eliminates areas where hillshade and terrain shadow distort pasture unmixing.
-
-### B. IBRA Biogeographic Region Stratification
-* **Purpose**: The operational comparison window is 1501 x 1501 pixels (45 km x 45 km, ~2,000 km2). Across biogeographic boundaries, this window can cover different environments, such as dry sand dunes next to river floodplains.
-* **The Problem**: An unconstrained window selects high cover values from the river floodplain to evaluate the sand dunes. This causes false degradation anomalies in the sand dunes.
-* **The Solution**: The software uses `ibra.fgb` (89 continental IBRA 7.0 regions). Each target pixel samples only reference sites from the same matching IBRA region.
+### Technical Rationale: Masking & IBRA Stratification
+- **NCAS Woody Extent (`inputs.changeData[0] != 2`)**: Excludes forest (`Class 2`) where tree crowns and shadow confound spectral unmixing of understorey pasture cover.
+- **Historical Clearing (`inputs.changeData[2] != 1`)**: Excludes cleared tracts so disturbed sites do not depress reference benchmarks.
+- **Terrain Slope Masking (`inputs.terrainData[0] < 39`)**: Retains plains, rises, and low hills (`< 10%` slope per Speight 2009 Table 5) while excluding rolling/steep terrain (`>= 39`).
+- **IBRA Stratification vs. `--no-ibra`**:
+  - Stratified mode (default in `seasonalDRCMIbra.py`) constrains each pixel's `1501 × 1501` candidate reference window to pixels sharing the exact same `uint8` IBRA region ID (`1..255`, covering IBRA 7.0 regions `1..89`), eliminating cross-bioregion contamination (e.g. floodplains bias-inflating nearby sand dunes).
+  - Unconstrained global mode (`--no-ibra`) pools all valid reference pixels in the comparison window.
 
 ---
 
-## 4. High-Performance Multi-IBRA Engine: `refpix_numba_ibra.py`
+## 3. Numba & Pipeline Optimizations
 
-### Memory Architecture and L2 Cache Locality
-Instead of a single 1D histogram, the multi-IBRA engine maintains a 2D table for each thread:
-- `percentilehist = np.zeros((90, 103), dtype=np.int32)` (37 KB)
-- `dryhist = np.zeros((90, 103), dtype=np.int32)` (37 KB)
-- `drysum = np.zeros((90, 103), dtype=np.int32)` (37 KB)
-- `valid_counts = np.zeros(90, dtype=np.int32)` (360 bytes)
-- `total_counts = np.zeros(90, dtype=np.int32)` (360 bytes)
+Both `refpix_numba.py` and `refpix_numba_ibra.py` implement the following optimizations while maintaining bit-for-bit mathematical equivalence with the reference sliding-window definition:
 
-**Total memory per thread: ~112 KB**.
-This buffer fits in the private L2 cache (512 KB to 1 MB) of each CPU core. This design avoids memory bus delays during row traversal.
+1. **2D Tiled Column Histograms & Automatic Accumulator Tiers**:
+   - Decomposes each strip into `col_tile_w=512` 2D tiles with column-major pre-aggregated histograms (`col_perc`, `col_dryhist`, `col_drysum`), avoiding repeated inner-loop scans over columns.
+   - Pads histogram width to `104` bins for SIMD/cache-line alignment and uses branchless `_bounds_fast` with pre-tracked non-zero reference totals (`perc_tot`).
+   - Automatically selects accumulator widths based on `window`:
+     * `window <= 4611`: `uint16` histograms + `int32` ground sums (`_KERNEL_U16` / `_IBRA_KERNEL_U16`) for half the L2 cache footprint.
+     * `4611 < window <= 65535`: `uint16` histograms + `int64` sums (`_KERNEL_U16_I64` / `_IBRA_KERNEL_U16_I64`) to prevent `int32` sum overflow when `window^2 * 101 > 2^31 - 1`.
+     * `window > 65535`: `int32` histograms + `int64` sums (`_KERNEL_I32` / `_IBRA_KERNEL_I32`).
+2. **Serpentine (Boustrophedon) Sweep & `strip_h=16384` Tiling**:
+   - Standard row-by-row 2D tiling resets and re-sums all `window` (`1,501`) column histograms whenever stepping from `(r, c1 - 1)` back to `(r + 1, c0)`.
+   - Alternating sweep directions—left-to-right on even rows and right-to-left on odd rows—keeps the active `1,501`-column histogram parked directly at the turnaround column, requiring only single-row add/remove updates (`r + halfwindow` and `r - 1 - halfwindow`) at row transitions:
 
-### O(1) Sliding Window Updates
-When moving one column to the right:
-1. The software reads pixels in the new column sliver:
-   `reg = ibra[k, right_c]`
-   If `reg > 0`, it updates `percentilehist[reg, pixval] += 1` and `dryhist[reg, pixval] += 1`.
-2. The software subtracts pixels in the old column sliver:
-   `reg = ibra[k, left_c]`
-   If `reg > 0`, it updates `percentilehist[reg, pixval] -= 1`.
-3. **Zero Looping Across Regions**: Updating the window requires O(window_height) operations per pixel. It does not loop through the 89 regions.
-4. **Target Evaluation**: The algorithm evaluates only the target region: `target_reg = ibra[r, c]`.
+     ```text
+     Row r   (even):  c0 ────────────────────────► c1-1   (slide window right)
+                                                     │     turnaround: update 1 top + 1 bottom row
+     Row r+1 (odd):   c0 ◄──────────────────────── c1-1   (slide window left, zero rebuild)
+     ```
 
----
+   - Raises default strip height to `strip_h=16384` (adaptively halving down toward `128` on smaller rasters/AOIs so all CPU cores stay busy).
+3. **Unified Multi-IBRA Specialization (`1..255` Regions)**:
+   - Supports all `1..255` `uint8` region IDs (lifted from the legacy `< 90` cap).
+   - Uses a 2-bit `256 × 256` block index (`_build_ibra_nonzero_blocks`: bit `0` = `ibra > 0`, bit `1` = valid paired `(cover, ground)`) to skip pure ocean and empty-halo tiles (`_tile_active_core_only`, `_tile_has_valid_halo`).
+   - `_scan_core_regions_2d` classifies each tile: single-region interior tiles (`k == 1`) run a zero-branch Serpentine fast path, while boundary tiles (`k >= 2`) run passes clipped strictly to each active region's tight 2D bounding box `(reg_rmin..reg_rmax, reg_cmin..reg_cmax)`.
+4. **Native Halo Slicing & Bounds Safety**:
+   - Both kernels accept `r_start`, `r_stop`, `c_start`, `c_stop` natively so halo-padded AOI strips never waste compute on padding margins or require post-compute slicing, and enforce strict `0 < val <= 101` range guards.
+5. **Sparse-Reference Cloud Recovery & Sample Floor**:
+   - Standard window validity passes when `n_valid >= minvalpercent * n_domain` (`--minvalpercent`, default `0.15`).
+   - When `--min-obs-percent > 0` (CLI default `0.50`), `_window_passes_gate` also recovers clear pixels inside sparse static-reference landscapes if seasonal cloud-free observability `n_valid >= min_obs_percent * n_pop` and static reference density `n_pop >= sparse_min_valpercent * n_domain` (`--sparse-min-valpercent`, CLI default `0.02`).
+   - Enforces a minimum upper-quantile sample floor (`--min-ref-samples`, CLI default `500`; Python API default `0`) inside `_calcmean`, and returns `-1` (`uint8(0)` NoData) if the `[lowerquantile, upperquantile]` band contains zero cloud-free observations (`nsum == 0`).
+6. **Pipeline I/O, Stage-1 & Encoding Optimizations**:
+   - `seasonalDRCMIbra.py` validates pixel size, axis alignment, and CRS (`_validate_aligned_grid`), cleanly zero-pads off-grid extents (`_read_clipped_band_window`), supports separate `--ibra-raster`, reuses chunk overlap rows (`prev_state`), prefetches the next chunk in a single background I/O thread (`ThreadPoolExecutor(max_workers=1)`), detects Linux cgroup v1/v2 CPU quotas (`_get_effective_cpus`), and runs Numba parallel groundcover LUT conversion and output encoding.
+   - `maskChangeSteepIbra.py` uses an ocean block skip, a reusable in-memory GDAL rasterization target, NumPy-2 NEP-50 safe `int16` arithmetic with invalid-value pre-masking, preserves Band 2 IBRA codes across `bareStats == 0` land holes, and performs atomic `.tmp.fgb` `ensure_ibra_albers` reprojection.
 
-## 5. Modernization and Performance Benchmarks
+### Measured Kernel Benchmark (`2000 × 2000`, `window = 1501`, `4` CPU cores)
 
-### A. Deployment and Toolchain
-- **Original Codebase Modernization**: Modernizes the legacy JRSRP repository ([`jrsrp/themes/cover/groundcover/drcm`](https://gitlab.com/jrsrp/themes/cover/groundcover/drcm)) with a pure-Python, memory-bounded, multi-IBRA implementation.
-- **Python >= 3.12 Compatibility**: Does not require legacy `distutils`, `f2py`, `gfortran`, `meson`, or `ninja` compilers at runtime.
-- **Pure Python Delivery**: Runs natively via Numba JIT on standard Python and NumPy environments.
+Measured on a 4-core `AMD EPYC 9R14` host (`NumPy 2.0.1`, `Numba 0.60.0`, C-contiguous `int8`/`uint8` arrays with `150` leading ocean/NoData rows, warm JIT, verified `0` mismatches against `main` across all 12M output pixels):
 
-### B. Performance Benchmarks
-Measured on 1000 x 1000 to 2000 x 2000 satellite arrays (4,000,000 pixels, comparison window = 1501):
-
-| Implementation | Runtime (2000 x 2000) | Throughput | Speedup vs Fortran |
+| Kernel Mode | `main` Baseline (`e629c6e`) | Serpentine 2D Tiled (`strip_h=16384`) | Speedup |
 | :--- | :--- | :--- | :--- |
-| **Fortran 90 (`f2py` single-thread)** | 12.38 s | 323,141 px/s | 1.0x (Baseline) |
-| **Numba Serial (1 core)** | 26.40 s | 151,500 px/s | 0.47x |
-| **Numba Parallel (`prange`, 8 cores)** | **5.80 s** | **689,599 px/s** | **2.13x faster** |
-
-*For medium windows (`window=51`), Numba parallel achieves > 12,000,000 px/s (1.72x faster than Fortran).*
-
-### C. Block Rasterization Optimizations in `maskChangeSteepIbra.py`
-- **Ocean Fast-Path Exit**: Ocean covers > 60% of the Australian bounding box. When a block contains no valid bare ground data (`not np.any(bareStats > 0)`), the script exits in 0.005 ms. This skips > 45,000 ocean blocks.
-- **Reusable Memory Dataset**: The script creates one in-memory GDAL dataset in `main()` and updates it per block. This removes 73,128 dataset creations and deletions.
-- **Single-Pass Spatial Queries**: Removed redundant `GetFeatureCount()` and `SetSpatialFilter(None)` calls.
-- **Speedup**: Processing time decreased from 64.5 ms to 30.2 ms per block (2.13x faster), saving ~42 minutes across Australia.
+| **`--no-ibra` (`refpixelfilternodata`)** | `4.935 s` (`0.81M px/s`) | **`0.370 s` (`10.81M px/s`)** | **`13.3×`** |
+| **`--ibra` single region (`k = 1`)** | `9.715 s` (`0.41M px/s`) | **`0.378 s` (`10.59M px/s`)** | **`25.7×`** |
+| **`--ibra` 4-region boundary (`k = 4`)** | `12.721 s` (`0.31M px/s`) | **`0.272 s` (`14.71M px/s`)** | **`46.8×`** |
 
 ---
 
-## 6. Verification and Test Suite (`test_ibra_drcm.py`)
+## 4. Installation & Quick Start (Tested on `test_data/`)
 
-The test suite in `test_ibra_drcm.py` provides 100% test coverage across all micro-functions, algorithms, and integration drivers:
+The repository includes ~`495 KiB` of real Australian Albers (`EPSG:3577`) Landsat test chips in `test_data/` so anyone can verify and run the full pipeline locally:
+- `test_data/lztmre_aus_m198912202012_dixa2_change_slope_ibra.tif` (`520 × 520` — Band 1: Masked reference stats, Band 2: IBRA regions `17` & `58`)
+- `test_data/lztmre_aus_m202606202608_dp8a2_vinterim.tif` (`440 × 440` — seasonal bare cover aligned at offset `col=40, row=40` inside the reference grid)
+- `test_data/aoi_nsw_ibra_boundary.geojson` (`EPSG:4326` AOI spanning the IBRA 17 / 58 boundary)
 
-### Test 1: Utility Functions (`format_time`, `derive_output_name`)
-- Validates duration formatting across boundary values (`0s`, `59s`, `60s`, `125s`, `3599s`, `3600s`, `3665s`).
-- Validates output filename derivation from `dixa2`, `dp8a2`, and generic basenames.
+### Create the Environment
 
-### Test 2: Groundcover Encoding Conversion (`convert_to_groundcover`)
-- Validates modern DEA (`dp8a2`) unscaled percentage conversion (`0..100%` bare with `255` NoData mapped to `101..1` groundcover and `0` NoData).
-- Validates legacy JRSRP (`dixa2`) 100-offset conversion (`100..200` bare with `0` NoData mapped to `101..1` groundcover and `0` NoData).
+```bash
+conda env create -f environment.yml
+conda activate drcm-numba
+```
 
-### Test 3: Kernel Functions (`_bounds`, `_calcmean`)
-- Validates quantile bounds calculation on discrete and degenerate distributions (`b0=79, b1=79` for 90-95th; `b0=49, b1=79` for 40-60th).
-- Validates mean groundcover calculation within bounds.
-- Confirms safe handling of empty histograms (returns 0 without division-by-zero errors).
+*(Or with Mamba: `mamba env create -f environment.yml && mamba activate drcm-numba`. If user-site packages in `~/.local` shadow Conda's NumPy version and cause a Numba import error, run with `PYTHONNOUSERSITE=1 python ...` or `python -s ...`.)*
 
-### Test 4: Vector Reprojection and Caching (`ensure_ibra_albers`)
-- Validates OGR vector reprojection to Australian Albers (`ibra_albers.fgb`).
-- Confirms metric coordinates (> 100,000 m), 89-feature preservation, and sub-millisecond cached re-reads.
+### Run the Verification Suite
 
-### Test 5: Fortran 90 Bit-for-Bit Verification (`refpix_numba` vs compiled Fortran)
-- Tested on 40,000 pixels comparing `refpix_numba.py` directly against compiled Fortran `refpixelfilter.so`.
-- **Result: 0 mismatches (100% bit-for-bit identical)**.
+```bash
+python test_ibra_drcm.py
+```
 
-### Test 6: Single-Region Invariance (`refpix_numba_ibra` vs `refpix_numba`)
-- Tested on 40,000 pixels inside a single IBRA region comparing the unconstrained kernel against the multi-IBRA kernel.
-- **Result: 0 mismatches (100% bit-for-bit identical)**.
+### Run `seasonalDRCMIbra.py` on the Included Test Chips
 
-### Test 7: Cheat-Proof Boundary Isolation
-- Synthetic 100 x 100 grid split at column 50:
-  - Left (col < 50): Region 10 (High cover: 95/80 ref, 90/70 ground)
-  - Right (col >= 50): Region 20 (Low cover: 35/20 ref, 30/15 ground)
-  - Window = 21 (overlapping boundary by +/- 10 pixels).
-- **Results**:
-  - Center pixel in Region 10 (col 49): strictly outputs **90** (local ground is 70).
-  - Center pixel in Region 20 (col 50): strictly outputs **30** (local ground is 15).
-  - Global unconstrained filter at col 50: outputs **72** (contaminated by Region 10 across boundary).
-  - **Result: Zero cross-boundary contamination**.
+```bash
+# 1. Full 440x440 test chip in IBRA-constrained mode (small window=61; --min-ref-samples 0 for small windows)
+python seasonalDRCMIbra.py \
+    test_data/lztmre_aus_m202606202608_dp8a2_vinterim.tif \
+    --percentile-file test_data/lztmre_aus_m198912202012_dixa2_change_slope_ibra.tif \
+    --window 61 \
+    --min-ref-samples 0 \
+    -o /tmp/drcm_chip_ibra.tif
 
-### Test 8: Ocean Masking and Validity Thresholds
-- Confirmed that pixels with `ibra == 0` (ocean or external bounding box) are strictly masked to `-1` (NoData).
-- Confirmed that pixels below the valid fraction threshold (`minvalpercent`) output `-1`, while pixels above the threshold output valid data.
+# 2. Subset to an EPSG:4326 GeoJSON AOI with halo padding in unconstrained mode (--no-ibra)
+python seasonalDRCMIbra.py \
+    test_data/lztmre_aus_m202606202608_dp8a2_vinterim.tif \
+    --percentile-file test_data/lztmre_aus_m198912202012_dixa2_change_slope_ibra.tif \
+    --geojson test_data/aoi_nsw_ibra_boundary.geojson \
+    --window 61 \
+    --min-ref-samples 0 \
+    --no-ibra \
+    -o /tmp/drcm_aoi_no_ibra.tif
+```
 
-### Test 9: Real Satellite Chip Multi-IBRA End-to-End Test
-- Extracted 2,250,000 pixels from NSW mosaic (`lztmre_nsw_...`) across the boundary of Darling Riverine Plains (Region 17) and Cobar Peneplain (Region 58).
-- Runs `maskChangeSteepIbra.py` followed by `seasonalDRCMIbra.py`.
-- **Results**:
-  - Output contains > 2,100,000 valid pixels.
-  - Confirmed that mean reference cover differs between Region 17 and Region 58.
-  - Confirmed internal overviews exist for levels 4, 8, 16, 32.
-
-### Test 10: Single Global Histogram Mode (`--no-ibra`)
-- Evaluates `seasonalDRCMIbra.py` with `--no-ibra` (single global histogram mode) against the direct unconstrained kernel.
-- Confirms output band descriptions update to `Unconstrained`.
-- **Result: 0 mismatches (100% bit-for-bit exact match)**.
+*(Note: For operational `1501 × 1501` windows, omit `--window 61 --min-ref-samples 0` to use the operational defaults `--window 1501`, `--minvalpercent 0.15`, `--min-obs-percent 0.50`, `--sparse-min-valpercent 0.02`, `--min-ref-samples 500`.)*
 
 ---
 
-## 7. Scripts and Command-Line Usage
+## 5. Verification Suite (`test_ibra_drcm.py`)
+
+| Test | Scope | Verified Properties |
+| :--- | :--- | :--- |
+| **Test 1** | Utility Helpers | `format_time`, `derive_output_name` (`dp8a2`/`dixa2` -> `doda2`/`doda2_ibra` and custom basenames) |
+| **Test 2** | Groundcover Encoding Conversion | `convert_to_groundcover` (`dp8a2`, `dixa2`, filename stage inference, fallback, `inplace=True`, empty arrays) |
+| **Test 3** | Kernel Micro-Functions | `_bounds`, `_bounds_fast`, multi-bin `_calcmean` `int64` floor rounding, `min_samples`, empty `-1` sentinel |
+| **Test 4** | Independent Brute-Force Oracle & Tiled Kernels | Histogram-free sorted-array oracle (`_oracle_refpixel`), `190 × 215` single-region invariance, slicing, `_KERNEL_I32` |
+| **Test 5** | Row & Column Boundary Isolation | Zero cross-IBRA contamination across vertical and horizontal bioregion borders |
+| **Test 6** | Ocean Masking & Block Skipping | `_build_valid_blocks` empty-block skip parity vs unskipped kernel & oracle, ocean `-1`, `minvalpercent` |
+| **Test 7** | Portable Real Satellite Multi-IBRA | `test_data/` `440 × 440` chip offset `(40, 40)` inside `520 × 520` ref, 4 overviews, IBRA 17 vs 58 divergence, oracle parity |
+| **Test 8** | Portable Real Satellite `--no-ibra` & `--geojson` | `test_data/` `--no-ibra` oracle parity + `EPSG:4326` `aoi_nsw_ibra_boundary.geojson` (`282 × 282`, 0 mismatches) |
+| **Test 9** | GeoTIFF Formats, Prefetch & CLI | `PREDICTOR=1/2`, `INTERLEAVE=BAND/PIXEL`, `COMPRESS=LZW`, `_LocalBandReader`, multi-chunk overlap + `main()` CLI output derivation |
+| **Test 10** | Multi-Chunk Overlap & Strict AOI Bounds | Multi-chunk vs single-chunk identity, `(40, 35)` offset, unpadded edge mismatch check, `--bbox`/`--geojson` subset bounds |
+| **Test 11** | Serpentine Kernels (`1..255`) & Edge Cases | Serpentine IBRA (`90..255`, `k=1`/`k>=2`, `_IBRA_KERNEL_I32`), `--no-ibra` (`strip_h=16384`), `cover/ground > 101`, `window=4621` `int64` overflow guard, `window=1`, `nrow=1` |
+| **Test 12** | `dixa2`, Off-Grid & Stage-1 Pipeline | `dixa2` with `255` chunks, off-grid 4-border zero-padding & `--ibra-raster`, CRS/resolution errors, `maskChangeSteepIbra` underflow/land-hole/attr `> 255` guards, `ensure_ibra_albers` reprojection/cache |
+| **Test 13** | Sparse-Ref Recovery, Sample Floor & Empty-Tail NoData | Cloud-free sparse recovery, cloudy fragment rejection, `min_ref_samples` cutoff, empty `[P90, P95]` `uint8(0)` NoData, CLI flags & fuzz parity vs `_oracle_refpixel` |
+
+---
+
+## 6. Scripts and Command-Line Reference
 
 ### Script Summary
 
 | Script | Purpose |
 | :--- | :--- |
-| `maskChangeSteepIbra.py` | Generates 2-band masked baseline stats (Band 1) and IBRA region codes (Band 2). |
-| `refpix_numba_ibra.py` | Multi-threaded Numba kernel holding 90 regional histograms. |
-| `refpix_numba.py` | Standalone unconstrained single-histogram Numba kernel. |
-| `seasonalDRCMIbra.py` | CLI driver for processing seasonal groundcover with IBRA constraints or single global histogram (`--no-ibra`). |
-| `test_ibra_drcm.py` | Automated test suite validating all 10 verification stages. |
+| `maskChangeSteepIbra.py` | RIOS Stage-1 preprocessor generating 2-band masked reference stats (Band 1) and IBRA region codes (Band 2, `1..255`). |
+| `refpix_numba_ibra.py` | Multi-threaded Serpentine 2D tiled Numba kernel (`--ibra`, regions `1..255`). |
+| `refpix_numba.py` | Multi-threaded Serpentine 2D tiled unconstrained Numba kernel (`--no-ibra`). |
+| `seasonalDRCMIbra.py` | Operational CLI driver for seasonal DRCM processing with chunk overlap reuse, background GDAL prefetch, AOI subsetting, and GeoTIFF output + overviews. |
+| `test_ibra_drcm.py` | Standalone 13-test verification suite using an independent oracle and `test_data/`. |
+| `environment.yml` | Minimal `conda-forge` environment definition (`python`, `numpy`, `numba`, `gdal`, `rios`). |
 
----
-
-### Step 1: Generate the 2-Band Reference Raster
+### Stage 1: Generate the 2-Band Reference + IBRA Raster
 
 ```bash
-conda run -n rios python maskChangeSteepIbra.py \
+python maskChangeSteepIbra.py \
     --change woodyMaxMinCleared.tif \
     --terrain slope_relief_class_3s.tif \
     --bare lztmre_aus_m198912202012_dixa2_bareStats.tif \
@@ -266,50 +248,39 @@ conda run -n rios python maskChangeSteepIbra.py \
     -o lztmre_aus_m198912202012_dixa2_change_slope2_ibra.tif
 ```
 
-- Ingests `ibra.fgb` and reprojects it to Australian Albers (`ibra_albers.fgb`).
-- Uses RIOS standard `cuiprogress.CUIProgressBar` for terminal progress display.
-- Uses block-level in-memory rasterization (`gdal.RasterizeLayer` with `SetSpatialFilterRect`), using 0 MB of temporary disk space in `/tmp`.
+- Automatically reprojects vector boundaries to match the reference raster CRS (`ensure_ibra_albers` -> `*_albers.fgb`) using atomic file replacement.
+- Supports `--bare-encoding {auto,dixa2,dp8a2}`, `--ibra-attr <FIELD>` (default `OBJECTID`, validated in `1..255`), and `--test-chip XOFF YOFF W H`.
 
----
-
-### Step 2: Run IBRA-Constrained Seasonal DRCM
+### Stage 2/3: Run Seasonal DRCM (`seasonalDRCMIbra.py`)
 
 ```bash
-conda run -n rios python seasonalDRCMIbra.py lztmre_nsw_m202606202608_dp8a2_vinterim.tif \
+python seasonalDRCMIbra.py lztmre_aus_m202606202608_dp8a2_vinterim.tif \
     --percentile-file lztmre_aus_m198912202012_dixa2_change_slope2_ibra.tif \
     --window 1501 \
-    --chunksize 2048
+    --chunksize 4096
 ```
 
-#### Key Parameters:
-- `input_groundcover`: Path to seasonal mosaic (`dp8a2` unscaled 0..100% or `dixa2` 100-offset).
-- `--percentile-file`: 2-band GeoTIFF from Step 1.
-- `--window`: Operational comparison window (default: 1501, ~45 km).
-- `--chunksize`: Vertical chunk height in rows (default: 2048, aligned to 4 x 512 tile boundaries to eliminate tile re-reading).
-- `--overviews`: Overview levels to calculate using average resampling (default: 4 8 16 32).
-- `--no-overviews`: Flag to skip overview generation if desired.
-- `--test-chip XOFF YOFF W H`: Micro-subsetting window for fast local prototyping before full continental runs.
-- `--no-ibra`: Disables IBRA regional constraints and runs with a single global comparison histogram.
-- `--threads`: Number of CPU threads (default: all available cores).
+#### Key CLI Flags
+- `input_groundcover`: Seasonal bare ground mosaic (`dp8a2` `0..100%` or `dixa2` `100..200`).
+- `--percentile-file`: 2-band reference GeoTIFF from Stage 1 (or 1-band reference paired with `--ibra-raster` or `--no-ibra`).
+- `--ibra-raster`: Optional separate IBRA raster when `--percentile-file` is single-band.
+- `-o, --output`: Output GeoTIFF path (or directory ending with `/`); derived automatically if omitted (`*_doda2_ibra*.tif` or `*_doda2*.tif`).
+- `--window`: Odd comparison window size in pixels (default: `1501`).
+- `--chunksize`: Vertical chunk height in rows (default: `4096`).
+- `--lowerquantile` / `--upperquantile`: Reference percentile bounds (defaults: `0.90` / `0.95`).
+- `--minvalpercent`: Minimum valid paired pixel fraction in window (default: `0.15`).
+- `--min-obs-percent`: Minimum seasonal cloud-free fraction of static reference pixels for sparse-reference recovery (`0` disables; CLI default: `0.50`).
+- `--sparse-min-valpercent`: Minimum static reference density eligible for sparse-reference recovery (CLI default: `0.02`).
+- `--min-ref-samples`: Minimum seasonal observations required inside `[lowerquantile, upperquantile]` (CLI default: `500`).
+- `--bbox MINX MINY MAXX MAXY` / `--geojson PATH`: Halo-padded spatial AOI subsetting matching full-extent outputs.
+- `--test-chip XOFF YOFF W H`: Unpadded micro-subsetting window for prototyping.
+- `--no-ibra`: Disable IBRA stratification and use the unconstrained global histogram kernel.
+- `--bare-encoding {auto,dp8a2,dixa2}`: Input bare ground scaling convention (default: `auto`).
+- `--threads N`: Numba / GeoTIFF thread count (default: detected CPUs / cgroup quota).
+- `--overviews ...` / `--no-overviews`: Overview levels (default: `4 8 16 32`) or skip overview generation.
 
-#### Output Product Specification (`GTiff`):
-- **Compression**: `COMPRESS=DEFLATE`, `ZLEVEL=1`, `PREDICTOR=1`, `TILED=YES`, `BLOCKXSIZE=512`, `BLOCKYSIZE=512`, `BIGTIFF=YES`.
-- **Overviews**: Internal DEFLATE-compressed overviews at 4x, 8x, 16x, 32x downsampling using AVERAGE resampling.
-- **Band 1**: `Difference Ground Cover (DGC)`
-  - Scaled as: 100 + (Groundcover - Refpixel)
-  - 100 = Zero Difference (matches reference)
-  - > 100 = Surplus Cover (greener / higher cover than reference)
-  - < 100 = Cover Deficit (degraded / lower cover than reference)
-  - 0 = NoData
-- **Band 2**: `Reference Ground Cover`
-  - Scaled as: 100 + Refpixel (100 = 0%, 200 = 100%)
-  - 0 = NoData
-
----
-
-### Step 3: Run the Verification Test Suite
-
-```bash
-conda run -n rios python test_ibra_drcm.py
-```
-Validates single-region invariance, boundary isolation, ocean masking, validity thresholds, overviews, and satellite multi-IBRA execution.
+#### Output Product Specification (`GTiff`)
+- **Compression & Layout**: `COMPRESS=DEFLATE`, `ZLEVEL=1`, `PREDICTOR=2`, `TILED=YES`, `INTERLEAVE=BAND`, `BLOCKXSIZE=512`, `BLOCKYSIZE=512`, `BIGTIFF=YES`.
+- **Overviews**: Internal `DEFLATE` overviews (`PREDICTOR_OVERVIEW=1`) at levels `4, 8, 16, 32` using `AVERAGE` resampling.
+- **Band 1 — Difference Ground Cover (`DGC`)**: `uint8`, `100 + (Groundcover - Refpixel)`, `0 = NoData` (`100` = zero difference, `> 100` = surplus cover, `< 100` = deficit cover).
+- **Band 2 — Reference Ground Cover**: `uint8`, `100 + Refpixel` (`100 = 0%`, `200 = 100%`), `0 = NoData`.

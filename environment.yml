@@ -1,0 +1,9 @@
+name: drcm-numba
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10,<3.13
+  - numpy>=1.26,<2.1
+  - numba>=0.60
+  - gdal>=3.8
+  - rios>=2.0
